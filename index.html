@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Active | BI Corporativo - Marcelo Chagas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body{font-family:'Plus Jakarta Sans',sans-serif;background-color:#f8fafc;user-select:none}
+        .glass-card{background:#fff;border-radius:1rem;border:1px solid #e2e8f0;transition:all 0.3s ease}
+        .row-group{background-color:#f1f5f9;font-weight:800;color:#1e3a8a}
+        .row-total{background-color:#0f172a;color:#fff;font-weight:900}
+        .row-sub{padding-left:1.5rem!important;color:#475569}
+        .tab-active{color:#1e3a8a;border-bottom:3px solid #1e3a8a;font-weight:800}
+        .row-mestre-dre{background-color:#e2e8f0!important;font-weight:900;color:#1e293b}
+        .row-grupo-dre{background-color:#f8fafc;font-weight:700;border-left:4px solid #3b82f6}
+        .row-detalhe-dre{color:#64748b;font-size:.85rem;padding-left:2rem!important}
+        .text-negativo{color:#ef4444!important}
+        .col-fade{opacity:0.2}
+        .loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column}
+        .loading-spinner{width:50px;height:50px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .toast{position:fixed;top:20px;right:20px;padding:16px 24px;border-radius:12px;color:#fff;font-weight:600;z-index:10000;transform:translateX(400px);transition:transform 0.3s ease;max-width:350px}
+        .toast.show{transform:translateX(0)}
+        .toast-success{background:#10b981}
+        .toast-error{background:#ef4444}
+        .toast-info{background:#3b82f6}
+        .status-indicator{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+        .status-online{background:#10b981;animation:pulse 2s infinite}
+        .status-offline{background:#ef4444}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+        @media print{.no-print{display:none!important}}
+    </style>
+</head>
+<body class="antialiased" oncontextmenu="return false">
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p id="loadingText" class="text-white mt-4 font-semibold">Processando...</p>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
+
+    <header class="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center no-print sticky top-0 z-50">
+        <div>
+            <h1 class="text-2xl font-black text-blue-900 uppercase tracking-tighter">BI CORPORATIVO - <span class="text-emerald-600">Pro Active</span></h1>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Marcelo Chagas | Head Controller</p>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full">
+                <span id="apiStatus" class="status-indicator status-offline"></span>
+                <span id="apiStatusText" class="text-[10px] font-bold text-slate-500">OFFLINE</span>
+            </div>
+            <div class="border-l pl-6 border-slate-200 text-right">
+                <div id="clock" class="text-lg font-black text-slate-700 leading-none">00:00:00</div>
+                <div id="date" class="text-[9px] font-bold text-slate-400 uppercase mt-1">Carregando...</div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="_lib.exportPDF()" class="bg-slate-900 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase hover:bg-black transition-all">PDF</button>
+                <button onclick="window.location.reload()" class="bg-rose-600 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase hover:bg-rose-700">Reset</button>
+            </div>
+        </div>
+    </header>
+
+    <nav class="px-8 mt-6 no-print">
+        <div class="flex gap-8 border-b border-slate-200">
+            <button onclick="_lib.nav('tab-balanco')" id="btn-tab-balanco" class="tab-active pb-3 text-xs font-black uppercase tracking-widest">1. Balanço Patrimonial</button>
+            <button onclick="_lib.nav('tab-dre')" id="btn-tab-dre" class="text-slate-400 pb-3 text-xs font-black uppercase tracking-widest">2. Demonstrativo (DRE)</button>
+        </div>
+    </nav>
+
+    <main id="tab-balanco" class="p-8 space-y-6">
+        <div class="grid grid-cols-4 gap-4">
+            <div id="card-wrap-atv25" class="glass-card p-5 border-l-4 border-blue-600">
+                <span class="text-[9px] font-black text-blue-600 uppercase">Ativo (2025)</span>
+                <h2 id="card-atv25" class="text-xl font-black text-blue-900">R$ 0,00</h2>
+            </div>
+            <div id="card-wrap-pas25" class="glass-card p-5 border-l-4 border-emerald-500">
+                <span class="text-[9px] font-black text-emerald-600 uppercase">Passivo+PL (2025)</span>
+                <h2 id="card-pas25" class="text-xl font-black text-emerald-900">R$ 0,00</h2>
+            </div>
+            <div id="card-wrap-atv24" class="glass-card p-5 border-l-4 border-slate-300">
+                <span class="text-[9px] font-black text-slate-400 uppercase">Ativo (2024)</span>
+                <h2 id="card-atv24" class="text-xl font-black text-slate-700">R$ 0,00</h2>
+            </div>
+            <div id="card-wrap-pas24" class="glass-card p-5 border-l-4 border-slate-400">
+                <span class="text-[9px] font-black text-slate-400 uppercase">Passivo+PL (2024)</span>
+                <h2 id="card-pas24" class="text-xl font-black text-slate-700">R$ 0,00</h2>
+            </div>
+        </div>
+
+        <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 no-print">
+            <div class="flex gap-8">
+                <button onclick="_lib.subNav('balanco')" id="sub-tab-b" class="tab-active text-xs font-black uppercase tracking-widest pb-1">Balanço Detalhado</button>
+                <button onclick="_lib.subNav('indicadores')" id="sub-tab-i" class="text-slate-400 text-xs font-black uppercase tracking-widest pb-1">Indicadores Financeiros</button>
+            </div>
+            <div class="flex gap-4">
+                <select id="fAno" onchange="_lib.updB()" class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-[11px] font-bold text-blue-900 outline-none">
+                    <option value="COMPARATIVO">Visão: Comparativa</option>
+                    <option value="2025">Foco: 2025</option>
+                    <option value="2024">Foco: 2024</option>
+                </select>
+                <input type="file" id="fB" class="hidden" accept=".xlsx, .xls" onchange="_lib.procB(event)">
+                <button onclick="document.getElementById('fB').click()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase hover:bg-emerald-700 transition-all">Upload Balanço</button>
+            </div>
+        </div>
+
+        <div id="view-balanco" class="grid grid-cols-2 gap-8">
+            <div class="glass-card p-6">
+                <h3 class="text-xs font-black text-blue-900 uppercase mb-4 border-b pb-2">Ativo</h3>
+                <table class="w-full text-[11px]">
+                    <thead class="text-[9px] text-slate-400 border-b">
+                        <tr><th class="text-left py-2">CONTA</th><th id="th-atv-25" class="text-right py-2">2025</th><th id="th-atv-24" class="text-right py-2 px-3">2024</th><th class="text-right py-2">AH%</th></tr>
+                    </thead>
+                    <tbody id="lista-ativo"></tbody>
+                </table>
+            </div>
+            <div class="glass-card p-6">
+                <h3 class="text-xs font-black text-emerald-900 uppercase mb-4 border-b pb-2">Passivo + PL</h3>
+                <table class="w-full text-[11px]">
+                    <thead class="text-[9px] text-slate-400 border-b">
+                        <tr><th class="text-left py-2">CONTA</th><th id="th-pas-25" class="text-right py-2">2025</th><th id="th-pas-24" class="text-right py-2 px-3">2024</th><th class="text-right py-2">AH%</th></tr>
+                    </thead>
+                    <tbody id="lista-passivo"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="view-indicadores" class="hidden grid grid-cols-4 gap-4"></div>
+    </main>
+
+    <main id="tab-dre" class="hidden p-8 space-y-6">
+        <div class="grid grid-cols-4 gap-4">
+            <div class="glass-card p-5 border-t-4 border-blue-500">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Receita Bruta</p>
+                <h3 id="kpi-receita" class="text-xl font-black text-slate-800">R$ 0,00</h3>
+            </div>
+            <div class="glass-card p-5 border-t-4 border-red-500">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Deduções</p>
+                <h3 id="kpi-deducao" class="text-xl font-black text-red-600">R$ 0,00</h3>
+            </div>
+            <div class="glass-card p-5 border-t-4 border-orange-500">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Despesas Operacionais</p>
+                <h3 id="kpi-despesa" class="text-xl font-black text-slate-800">R$ 0,00</h3>
+            </div>
+            <div class="glass-card p-5 border-t-4 border-green-500">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Resultado Líquido</p>
+                <h3 id="kpi-resultado" class="text-xl font-black text-green-600">R$ 0,00</h3>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4 no-print">
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Período</label>
+                <select id="dMes" onchange="_lib.updD()" class="w-full font-bold text-slate-700 outline-none bg-transparent"></select>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Visão</label>
+                <div class="flex bg-slate-100 p-1 rounded-lg">
+                    <button id="dBtnS" onclick="_lib.vD('S')" class="flex-1 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600">Sintética</button>
+                    <button id="dBtnA" onclick="_lib.vD('A')" class="flex-1 py-1 text-xs font-bold rounded text-slate-500">Analítica</button>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200">
+                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Ações</label>
+                <input type="file" id="fD" class="hidden" accept=".xlsx, .xls" onchange="_lib.procD(event)">
+                <button onclick="document.getElementById('fD').click()" class="w-full bg-blue-600 text-white py-2 rounded-lg text-[10px] font-black uppercase hover:bg-blue-700 transition-all">Upload DRE</button>
+            </div>
+        </div>
+
+        <div class="glass-card overflow-hidden">
+            <table class="w-full text-left">
+                <thead class="bg-slate-50 border-b">
+                    <tr><th class="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase">Descrição</th><th class="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase text-right">Valor Financeiro</th></tr>
+                </thead>
+                <tbody id="dBody"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    // CONFIGURAÇÃO DA API - ALTERE AQUI APÓS DEPLOY DO BACKEND
+    // ═══════════════════════════════════════════════════════════════
+    
+    // OPÇÃO 1: Backend local (desenvolvimento)
+    // const API_BASE_URL = 'http://localhost:3001';
+    
+    // OPÇÃO 2: Backend no Render (exemplo)
+    // const API_BASE_URL = 'https://proactive-bi-api.onrender.com';
+    
+    // OPÇÃO 3: Backend na Railway (exemplo)
+    // const API_BASE_URL = 'https://proactive-bi-api.up.railway.app';
+    
+    // OPÇÃO 4: Seu domínio próprio (exemplo)
+    // const API_BASE_URL = 'https://api.seudominio.com';
+    
+    // AUTO-DETECÇÃO: Tenta descobrir automaticamente
+    const API_BASE_URL = (() => {
+        const hostname = window.location.hostname;
+        
+        // Se estiver rodando localmente
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:3001';
+        }
+        
+        // Se estiver no Kimi (frontend hospedado)
+        if (hostname.includes('kimi')) {
+            // ⚠️ ALTERE AQUI COM A URL DO SEU BACKEND APÓS O DEPLOY
+            // return 'https://SEU-BACKEND.onrender.com';
+            return null; // null = API offline
+        }
+        
+        return null;
+    })();
+    
+    const API_CONFIG = {
+        baseURL: API_BASE_URL ? `${API_BASE_URL}/api` : null,
+        timeout: 30000
+    };
+
+    // Cliente HTTP
+    const apiClient = {
+        async request(url, options = {}) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+            
+            try {
+                const response = await fetch(`${API_CONFIG.baseURL}${url}`, {
+                    ...options,
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                        ...options.headers
+                    }
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    throw new Error('Tempo de espera excedido');
+                }
+                throw error;
+            }
+        },
+        
+        get(url) { return this.request(url, { method: 'GET' }); },
+        
+        post(url, data, isFormData = false) {
+            const options = { method: 'POST' };
+            if (isFormData) {
+                options.body = data;
+            } else {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(data);
+            }
+            return this.request(url, options);
+        }
+    };
+
+    // Sistema de notificações
+    const notify = {
+        show(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span>
+                    <span>${message}</span>
+                </div>
+            `;
+            container.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        },
+        success(msg) { this.show(msg, 'success'); },
+        error(msg) { this.show(msg, 'error'); },
+        info(msg) { this.show(msg, 'info'); }
+    };
+
+    // Loading overlay
+    const loading = {
+        show(text = 'Processando...') {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        },
+        hide() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+    };
+
+    const _lib = (function() {
+        'use strict';
+        let _st = {
+            b: { a: [], p: [] },
+            d: { raw: [], v: 'S' },
+            m: ["RECEITA TOTAL", "(-) DEDUÇÕES DA RECEITA BRUTA", "RECEITA LIQUIDA", "LUCRO BRUTO", "DESPESAS OPERACIONAIS", "DESPESAS CONSUMO", "DESPESAS ADMINISTRATIVAS", "RESULTADO OPERACIONAL", "RESULTADO ANTES DO IR E CSL"]
+        };
+
+        const _f = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+        const _p = (v) => { 
+            if(!v) return 0; 
+            if(typeof v === 'number') return v; 
+            let n = v.toString().replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+            return parseFloat(n) || 0; 
+        };
+
+        // Verificar status da API
+        async function checkAPIStatus() {
+            // Verificar se a URL da API está configurada
+            if (!API_CONFIG.baseURL) {
+                document.getElementById('apiStatus').className = 'status-indicator status-offline';
+                document.getElementById('apiStatusText').textContent = 'NÃO CONFIGURADO';
+                document.getElementById('apiStatusText').className = 'text-[10px] font-bold text-amber-600';
+                return false;
+            }
+            
+            try {
+                await apiClient.get('/health');
+                document.getElementById('apiStatus').className = 'status-indicator status-online';
+                document.getElementById('apiStatusText').textContent = 'ONLINE';
+                document.getElementById('apiStatusText').className = 'text-[10px] font-bold text-emerald-600';
+                return true;
+            } catch {
+                document.getElementById('apiStatus').className = 'status-indicator status-offline';
+                document.getElementById('apiStatusText').textContent = 'OFFLINE';
+                document.getElementById('apiStatusText').className = 'text-[10px] font-bold text-rose-600';
+                return false;
+            }
+        }
+
+        // Carregar dados iniciais
+        async function loadInitialData() {
+            const isOnline = await checkAPIStatus();
+            if (!isOnline) {
+                notify.error('API offline. Verifique o servidor backend.');
+                return;
+            }
+
+            loading.show('Carregando dados...');
+            
+            try {
+                // Carregar balanço
+                const balanco = await apiClient.get('/balanco/latest');
+                if (balanco && balanco.ativo && balanco.ativo.length > 0) {
+                    _st.b.a = balanco.ativo.map(i => ({
+                        d: i.descricao,
+                        v25: i.v2025,
+                        v24: i.v2024,
+                        t: i.isTotal,
+                        g: i.isGrupo
+                    }));
+                    _st.b.p = balanco.passivo.map(i => ({
+                        d: i.descricao,
+                        v25: i.v2025,
+                        v24: i.v2024,
+                        t: i.isTotal,
+                        g: i.isGrupo
+                    }));
+                    this.updB();
+                    notify.success('Balanço carregado do servidor');
+                }
+
+                // Carregar DRE
+                const dre = await apiClient.get('/dre/latest');
+                if (dre && dre.dados && dre.dados.length > 0) {
+                    _st.d.periodos = dre.periodos;
+                    _st.d.dados = dre.dados;
+                    _st.d.kpis = dre.kpis;
+                    
+                    // Preencher select de períodos
+                    const sm = document.getElementById('dMes');
+                    sm.innerHTML = '';
+                    dre.periodos.forEach((p, i) => {
+                        sm.innerHTML += `<option value="${i + 1}">${p}</option>`;
+                    });
+                    sm.value = dre.periodos.length;
+                    
+                    this.updD();
+                }
+            } catch (error) {
+                notify.error('Erro ao carregar dados: ' + error.message);
+            } finally {
+                loading.hide();
+            }
+        }
+
+        return {
+            init: function() {
+                setInterval(() => {
+                    const n = new Date();
+                    document.getElementById('clock').innerText = n.toLocaleTimeString('pt-BR');
+                    document.getElementById('date').innerText = n.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                }, 1000);
+                
+                // Carregar dados ao iniciar
+                loadInitialData.call(this);
+                
+                // Verificar status da API a cada 30s
+                setInterval(checkAPIStatus, 30000);
+            },
+
+            nav: function(t) {
+                document.getElementById('tab-balanco').classList.toggle('hidden', t !== 'tab-balanco');
+                document.getElementById('tab-dre').classList.toggle('hidden', t !== 'tab-dre');
+                document.getElementById('btn-tab-balanco').className = t === 'tab-balanco' ? 'tab-active pb-3 text-xs font-black uppercase tracking-widest' : 'text-slate-400 pb-3 text-xs font-black uppercase tracking-widest';
+                document.getElementById('btn-tab-dre').className = t === 'tab-dre' ? 'tab-active pb-3 text-xs font-black uppercase tracking-widest' : 'text-slate-400 pb-3 text-xs font-black uppercase tracking-widest';
+            },
+
+            procB: async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                loading.show('Enviando balanço para o servidor...');
+
+                try {
+                    // Primeiro, processar localmente para preview
+                    const r = new FileReader();
+                    r.onload = async (x) => {
+                        const wb = XLSX.read(new Uint8Array(x.target.result), {type: 'array'});
+                        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1});
+                        _st.b.a = []; _st.b.p = [];
+                        rows.forEach((row, idx) => {
+                            if (idx === 0 || (!row[0] && !row[4])) return;
+                            if (row[0]) _st.b.a.push({ d: row[0], v25: _p(row[1]), v24: _p(row[2]), t: row[0].toLowerCase().includes('total'), g: row[0].toLowerCase().includes('circulante') });
+                            if (row[4]) _st.b.p.push({ d: row[4], v25: _p(row[5]), v24: _p(row[6]), t: row[4].toLowerCase().includes('total'), g: row[4].toLowerCase().includes('circulante') || row[4].toLowerCase().includes('líquido') });
+                        });
+                        this.updB();
+
+                        // Enviar para o servidor
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        const result = await apiClient.post('/upload/balanco', formData, true);
+                        notify.success('Balanço salvo no servidor com sucesso!');
+                    };
+                    r.readAsArrayBuffer(file);
+                } catch (error) {
+                    notify.error('Erro ao enviar balanço: ' + error.message);
+                } finally {
+                    loading.hide();
+                    e.target.value = '';
+                }
+            },
+
+            updB: function() {
+                const ano = document.getElementById('fAno').value;
+                const c25 = (ano === '2024') ? 'col-fade' : '';
+                const c24 = (ano === '2025') ? 'col-fade' : '';
+
+                const ren = (id, list) => {
+                    document.getElementById(id).innerHTML = list.map(i => {
+                        const ah = i.v24 ? (((i.v25/i.v24)-1)*100).toFixed(1) : "0.0";
+                        return `<tr class="${i.t?'row-total':(i.g?'row-group':'row-sub border-b')}">
+                            <td class="py-2 uppercase">${i.d}</td>
+                            <td class="text-right font-bold ${c25}">${_f(i.v25)}</td>
+                            <td class="text-right font-bold px-3 ${c24}">${_f(i.v24)}</td>
+                            <td class="text-right font-black ${ah>=0?'text-emerald-500':'text-rose-500'}">${ah}%</td>
+                        </tr>`;
+                    }).join('');
+                };
+                ren('lista-ativo', _st.b.a); ren('lista-passivo', _st.b.p);
+                this.syncCards(ano);
+                this.calcInd();
+            },
+
+            syncCards: function(ano) {
+                const getV = (l, v) => { const r = l.find(x=>x.t); return r ? (v===25?r.v25:r.v24) : 0; };
+                document.getElementById('card-atv25').innerText = _f(getV(_st.b.a, 25));
+                document.getElementById('card-atv24').innerText = _f(getV(_st.b.a, 24));
+                document.getElementById('card-pas25').innerText = _f(getV(_st.b.p, 25));
+                document.getElementById('card-pas24').innerText = _f(getV(_st.b.p, 24));
+            },
+
+            calcInd: async function() {
+                try {
+                    const result = await apiClient.get('/indicadores');
+                    if (result.indicadores && result.indicadores.length > 0) {
+                        document.getElementById('view-indicadores').innerHTML = result.indicadores.map(i => `
+                            <div class="glass-card p-5 text-center">
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">${i.nome}</p>
+                                <h4 class="text-2xl font-black text-blue-900 my-1">${i.valor}</h4>
+                                <p class="text-[9px] text-slate-400">${i.descricao}</p>
+                                <span class="inline-block mt-2 px-2 py-1 text-[9px] font-bold rounded ${i.interpretacao === 'Saudável' || i.interpretacao === 'Bom' || i.interpretacao === 'Flexível' ? 'bg-emerald-100 text-emerald-700' : i.interpretacao === 'Atenção' || i.interpretacao === 'Alto risco' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}">${i.interpretacao}</span>
+                            </div>
+                        `).join('');
+                    }
+                } catch (error) {
+                    console.error('Erro ao calcular indicadores:', error);
+                }
+            },
+
+            procD: async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                loading.show('Enviando DRE para o servidor...');
+
+                try {
+                    const r = new FileReader();
+                    r.onload = async (x) => {
+                        const wb = XLSX.read(new Uint8Array(x.target.result), { type: 'array' });
+                        _st.d.raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+                        const sm = document.getElementById('dMes'); sm.innerHTML = '';
+                        _st.d.raw[0].forEach((c, i) => { if(i>0 && c) sm.innerHTML += `<option value="${i}">${c}</option>`; });
+                        sm.value = _st.d.raw[0].length - 1;
+                        this.updD();
+
+                        // Enviar para o servidor
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        const result = await apiClient.post('/upload/dre', formData, true);
+                        notify.success('DRE salva no servidor com sucesso!');
+                    };
+                    r.readAsArrayBuffer(file);
+                } catch (error) {
+                    notify.error('Erro ao enviar DRE: ' + error.message);
+                } finally {
+                    loading.hide();
+                    e.target.value = '';
+                }
+            },
+
+            vD: function(v) { 
+                _st.d.v = v; 
+                document.getElementById('dBtnS').className = v==='S'?'flex-1 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600':'flex-1 py-1 text-xs font-bold rounded text-slate-500';
+                document.getElementById('dBtnA').className = v==='A'?'flex-1 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600':'flex-1 py-1 text-xs font-bold rounded text-slate-500';
+                this.updD(); 
+            },
+
+            updD: function() {
+                const mes = parseInt(document.getElementById('dMes').value), body = document.getElementById('dBody');
+                body.innerHTML = ''; let k = {r:0, d:0, o:0, l:0};
+                _st.d.raw.slice(1).forEach(l => {
+                    const desc = l[0]?.toString().trim() || ""; if(!desc || desc.includes("DRE -")) return;
+                    const val = _p(l[mes]);
+                    const isM = _st.m.includes(desc.toUpperCase());
+                    if(desc.toUpperCase() === "RECEITA TOTAL") k.r = val;
+                    if(desc.toUpperCase().includes("DEDUÇÕES")) k.d = val;
+                    if(desc.toUpperCase() === "DESPESAS OPERACIONAIS") k.o = val;
+                    if(desc.toUpperCase().includes("RESULTADO ANTES DO IR")) k.l = val;
+                    
+                    if(_st.d.v === 'S' && !isM) return;
+                    const tr = document.createElement('tr');
+                    tr.className = isM ? "row-grupo-dre" : "row-detalhe-dre border-b";
+                    tr.innerHTML = `<td class="px-6 py-3 uppercase">${desc}</td><td class="px-6 py-3 text-right font-bold ${val < 0 ? 'text-negativo' : ''}">${_f(val)}</td>`;
+                    body.appendChild(tr);
+                });
+                document.getElementById('kpi-receita').innerText = _f(k.r);
+                document.getElementById('kpi-deducao').innerText = _f(k.d);
+                document.getElementById('kpi-despesa').innerText = _f(k.o);
+                document.getElementById('kpi-resultado').innerText = _f(k.l);
+            },
+
+            subNav: function(t) {
+                document.getElementById('view-balanco').classList.toggle('hidden', t !== 'balanco');
+                document.getElementById('view-indicadores').classList.toggle('hidden', t !== 'indicadores');
+                document.getElementById('sub-tab-b').className = t === 'balanco' ? 'tab-active text-xs font-black uppercase tracking-widest pb-1' : 'text-slate-400 text-xs font-black uppercase tracking-widest pb-1';
+                document.getElementById('sub-tab-i').className = t === 'indicadores' ? 'tab-active text-xs font-black uppercase tracking-widest pb-1' : 'text-slate-400 text-xs font-black uppercase tracking-widest pb-1';
+            },
+
+            exportPDF: function() {
+                const el = document.body;
+                html2pdf().set({ margin: 2, filename: 'Relatorio_ProActive.pdf', jsPDF: { orientation: 'landscape' } }).from(el).save();
+            }
+        };
+    })();
+    window.onload = () => _lib.init();
+    </script>
+<script>
+const MINHA_API = "SUA_URL_DO_RAILWAY_AQUI"; // Cole aqui a URL que o Railway te der
+
+// 1. Carregar dados ao abrir o site
+window.addEventListener('load', async () => {
+    try {
+        const response = await fetch(`${MINHA_API}/api/load`);
+        const data = await response.json();
+        if(data.balanco) { _st.b = data.balanco; _lib.updB(); }
+        if(data.dre) { _st.d = data.dre; _lib.updD(); }
+        console.log("Dados carregados do banco blindado.");
+    } catch (e) { console.error("Erro ao carregar banco:", e); }
+});
+
+// 2. Salvar Balanço ao fazer upload
+const originalProcB = _lib.procB;
+_lib.procB = function(e) {
+    originalProcB.apply(this, arguments);
+    setTimeout(() => {
+        fetch(`${MINHA_API}/api/save/balanco`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(_st.b)
+        });
+    }, 1500);
+};
+
+// 3. Salvar DRE ao fazer upload
+const originalProcD = _lib.procD;
+_lib.procD = function(e) {
+    originalProcD.apply(this, arguments);
+    setTimeout(() => {
+        fetch(`${MINHA_API}/api/save/dre`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(_st.d)
+        });
+    }, 1500);
+};
+</script>
+</body>
+</html>
